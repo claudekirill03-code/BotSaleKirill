@@ -8,12 +8,14 @@ import anthropic
 from openai import AsyncOpenAI, OpenAI
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from analytics import log_analysis, format_stats_message
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
 ALLOWED_USER_IDS = set(
     int(x.strip()) for x in os.environ.get("ALLOWED_USER_ID", "0").split(",") if x.strip()
 )
@@ -178,6 +180,14 @@ async def start(message: Message):
         reply_markup=new_situation_keyboard()
     )
 
+@dp.message(Command("stats"))
+async def stats(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("❌ Доступ запрещен. Эта команда только для администратора.")
+        return
+    stats_text = format_stats_message()
+    await message.answer(stats_text, parse_mode="HTML")
+
 @dp.callback_query(F.data == "new_situation")
 async def new_situation(callback: CallbackQuery):
     if not is_allowed(callback.from_user.id):
@@ -214,6 +224,7 @@ async def process_media_group(user_id, group_id, caption):
     try:
         answer = await ask_claude(user_id, content)
         await send_answer(user_id, answer)
+        log_analysis(user_id, analysis_type="photo")
     except Exception as e:
         await bot.send_message(user_id, f"Ошибка: {e}")
 
@@ -249,6 +260,7 @@ async def handle_photo(message: Message):
         try:
             answer = await ask_claude(message.from_user.id, content)
             await send_answer(message.from_user.id, answer)
+            log_analysis(message.from_user.id, analysis_type="photo")
         except Exception as e:
             await message.answer(f"Ошибка: {e}")
 
@@ -271,8 +283,9 @@ async def handle_voice(message: Message):
             return
         answer = await ask_claude(message.from_user.id, text)
         await send_answer(message.from_user.id, answer, with_voice=True)
+        log_analysis(message.from_user.id, analysis_type="voice")
     except Exception as e:
-        await bot.send_message(user_id, f"Ошибка: {e}")
+        await bot.send_message(message.from_user.id, f"Ошибка: {e}")
 
 @dp.message(F.text & ~F.text.startswith("/"))
 async def handle_text(message: Message):
@@ -285,6 +298,7 @@ async def handle_text(message: Message):
     try:
         answer = await ask_claude(message.from_user.id, message.text)
         await send_answer(message.from_user.id, answer)
+        log_analysis(message.from_user.id, analysis_type="text")
     except Exception as e:
         await bot.send_message(message.from_user.id, f"Ошибка: {e}")
 
