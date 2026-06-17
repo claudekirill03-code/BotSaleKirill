@@ -15,7 +15,9 @@ from analytics import log_analysis, format_stats_message
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
-ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
+ADMIN_IDS = set(
+    int(x.strip()) for x in os.environ.get("ADMIN_ID", "0").split(",") if x.strip()
+)
 ALLOWED_USER_IDS = set(
     int(x.strip()) for x in os.environ.get("ALLOWED_USER_ID", "0").split(",") if x.strip()
 )
@@ -182,7 +184,7 @@ async def start(message: Message):
 
 @dp.message(Command("stats"))
 async def stats(message: Message):
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id not in ADMIN_IDS:
         await message.answer("❌ Доступ запрещен. Эта команда только для администратора.")
         return
     stats_text = format_stats_message()
